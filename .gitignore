@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.egg
+.eggs/
+
+# Node.js
+node_modules/
+dist/
+.output/
+.next/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker/.env
+
+# Media
+*.mp4
+*.mov
+*.mp3
+*.wav
+uploads/
+generated/
+
+# Database
+*.db
+*.sqlite3
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# MyPy
+.mypy_cache/
+
+# Ruff
+.ruff_cache/
+
+# Alembic versions (keep the folder but ignore generated versions)
+# backend/migrations/versions/*.py is tracked
