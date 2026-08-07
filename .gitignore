@@ -57,5 +57,8 @@ htmlcov/
 # Ruff
 .ruff_cache/
 
+# Generated test assets (not tracked)
+generated/
+
 # Alembic versions (keep the folder but ignore generated versions)
 # backend/migrations/versions/*.py is tracked
