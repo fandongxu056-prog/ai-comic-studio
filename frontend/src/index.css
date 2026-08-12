@@ -1,25 +1,68 @@
 @import "tailwindcss";
 
+/* ── AI Comic Studio — Enterprise Dark Theme ── */
+
 @theme {
-  --color-primary: #6366f1;
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #f4f4f5;
-  --color-secondary-foreground: #18181b;
-  --color-muted: #f4f4f5;
-  --color-muted-foreground: #71717a;
-  --color-accent: #f4f4f5;
-  --color-accent-foreground: #18181b;
+  /* Base palette */
+  --color-background: #08080f;
+  --color-foreground: #e4e4ec;
+  --color-card: #0f0f18;
+  --color-card-foreground: #e4e4ec;
+  --color-popover: #12121d;
+  --color-popover-foreground: #e4e4ec;
+
+  /* Primary — warm amber/gold for creative platform */
+  --color-primary: #f59e0b;
+  --color-primary-foreground: #0f0f18;
+  --color-primary-hover: #fbbf24;
+
+  /* Secondary */
+  --color-secondary: #1e1e2e;
+  --color-secondary-foreground: #c4c4d4;
+
+  /* Muted */
+  --color-muted: #1a1a2a;
+  --color-muted-foreground: #7c7c94;
+
+  /* Accent */
+  --color-accent: #1e1e2e;
+  --color-accent-foreground: #e4e4ec;
+
+  /* Status colors */
   --color-destructive: #ef4444;
   --color-destructive-foreground: #ffffff;
-  --color-border: #e4e4e7;
-  --color-input: #e4e4e7;
-  --color-ring: #6366f1;
-  --color-background: #ffffff;
-  --color-foreground: #09090b;
-  --color-card: #ffffff;
-  --color-card-foreground: #09090b;
+  --color-success: #10b981;
+  --color-success-foreground: #ffffff;
+  --color-warning: #f59e0b;
+  --color-warning-foreground: #0f0f18;
+  --color-info: #3b82f6;
+  --color-info-foreground: #ffffff;
+
+  /* Borders & inputs */
+  --color-border: #1e1e30;
+  --color-border-hover: #2e2e44;
+  --color-input: #1a1a2a;
+  --color-input-foreground: #e4e4ec;
+  --color-ring: #f59e0b;
+
+  /* Stage colors */
+  --color-stage-script: #3b82f6;
+  --color-stage-assets: #8b5cf6;
+  --color-stage-storyboard: #f97316;
+  --color-stage-production: #10b981;
+
+  /* Surface hierarchy */
+  --color-surface-0: #08080f;
+  --color-surface-1: #0f0f18;
+  --color-surface-2: #14141f;
+  --color-surface-3: #1a1a2a;
+
   --radius: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
 }
+
+/* ── Base Styles ── */
 
 * {
   border-color: var(--color-border);
@@ -28,4 +71,96 @@
 body {
   color: var(--color-foreground);
   background: var(--color-background);
+  font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar ── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-hover);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted-foreground);
+}
+
+/* ── Utility animations ── */
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(245, 158, 11, 0.15); }
+  50% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.3); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+.animate-slide-in {
+  animation: slide-in-right 0.3s ease-out;
+}
+.animate-pulse-glow {
+  animation: pulse-glow 2s infinite;
+}
+
+/* ── Shimmer loading ── */
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-2) 25%,
+    var(--color-surface-3) 50%,
+    var(--color-surface-2) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ── Glass card effect ── */
+
+.glass-card {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.01) 100%
+  );
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--color-border);
+}
+
+/* ── Stage gradient accents ── */
+
+.stage-accent-script {
+  border-left: 3px solid var(--color-stage-script);
+}
+.stage-accent-assets {
+  border-left: 3px solid var(--color-stage-assets);
+}
+.stage-accent-storyboard {
+  border-left: 3px solid var(--color-stage-storyboard);
+}
+.stage-accent-production {
+  border-left: 3px solid var(--color-stage-production);
 }

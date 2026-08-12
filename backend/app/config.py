@@ -52,9 +52,10 @@ class Settings(BaseSettings):
     image_concurrency: int = 4
 
     # ── Video Generation ──
-    video_provider: str = ""
-    video_model: str = ""
+    video_provider: Literal["minimax", "ffmpeg", "veo", "seedance", "kling"] = "ffmpeg"
+    video_model: str = "video-01"
     video_concurrency: int = 2
+    minimax_api_key: str = ""
 
     # ── TTS ──
     tts_provider: str = "openai"

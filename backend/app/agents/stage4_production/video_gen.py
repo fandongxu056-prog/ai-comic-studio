@@ -110,11 +110,96 @@ _video_provider_registry: dict[str, type[VideoProvider]] = {
     "veo": VeoProvider,
     "seedance": SeedanceProvider,
     "kling": KlingProvider,
+    "minimax": None,   # Lazy-loaded from minimax_video_provider.py
+    "ffmpeg": None,    # Lazy-loaded from ffmpeg_video_provider.py
 }
 
 
 def create_video_provider(provider_name: str, **kwargs) -> VideoProvider:
+    """Factory to create a video provider instance.
+
+    Supported providers:
+    - minimax: MiniMax (Hailuo) AI video generation (requires API key)
+    - ffmpeg: Local FFmpeg Ken Burns effect (free, no API key)
+    - veo: Google Veo (stub)
+    - seedance: Seedance (stub)
+    - kling: Kling (stub)
+    """
+    # Lazy-load providers not based on the abstract VideoProvider interface
+    if provider_name == "minimax":
+        from app.agents.stage4_production.minimax_video_provider import MiniMaxVideoProvider
+
+        class _MiniMaxAdapter(VideoProvider):
+            """Adapter to make MiniMaxVideoProvider conform to VideoProvider interface."""
+
+            def __init__(self, api_key: str = "", model: str = "video-01", **kw):
+                self._provider = MiniMaxVideoProvider(api_key=api_key, model=model)
+
+            async def generate(self, request: VideoGenRequest) -> VideoGenResult:
+                result = await self._provider.generate(
+                    shot_id=request.shot_id,
+                    start_frame_url=request.start_frame_url,
+                    prompt=request.motion_prompt,
+                    duration_ms=request.duration_ms,
+                )
+                return VideoGenResult(
+                    shot_id=request.shot_id,
+                    success=result.success,
+                    video_url=result.video_url,
+                    duration_ms=result.duration_ms,
+                    generation_time_ms=result.generation_time_ms,
+                    cost_usd=result.cost_estimate_usd,
+                    error_message=result.error_message,
+                )
+
+            def estimate_cost(self, request: VideoGenRequest) -> float:
+                return self._provider._estimate_cost(request.duration_ms)
+
+            @property
+            def provider_name(self) -> str:
+                return "minimax"
+
+        return _MiniMaxAdapter(**kwargs)
+
+    elif provider_name == "ffmpeg":
+        from app.agents.stage4_production.ffmpeg_video_provider import FFmpegVideoProvider
+
+        class _FFmpegAdapter(VideoProvider):
+            """Adapter to make FFmpegVideoProvider conform to VideoProvider interface."""
+
+            def __init__(self, output_dir: str = "./generated/videos", **kw):
+                self._provider = FFmpegVideoProvider(output_dir=output_dir)
+
+            async def generate(self, request: VideoGenRequest) -> VideoGenResult:
+                result = await self._provider.generate(
+                    shot_id=request.shot_id,
+                    image_path_or_url=request.start_frame_url,
+                    duration_ms=request.duration_ms,
+                )
+                return VideoGenResult(
+                    shot_id=request.shot_id,
+                    success=result.success,
+                    video_url=result.video_url,
+                    local_path=result.local_path,
+                    duration_ms=result.duration_ms,
+                    generation_time_ms=result.generation_time_ms,
+                    cost_usd=0.0,
+                    error_message=result.error_message,
+                )
+
+            def estimate_cost(self, request: VideoGenRequest) -> float:
+                return 0.0
+
+            @property
+            def provider_name(self) -> str:
+                return "ffmpeg"
+
+        return _FFmpegAdapter(**kwargs)
+
     cls = _video_provider_registry.get(provider_name)
-    if not cls:
-        raise ValueError(f"Unknown video provider: {provider_name}")
+    if cls is None:
+        raise ValueError(
+            f"Unknown video provider: {provider_name}. "
+            f"Available: minimax, ffmpeg, veo, seedance, kling"
+        )
     return cls(**kwargs)
