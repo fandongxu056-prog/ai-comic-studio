@@ -114,19 +114,26 @@ class ScriptWriterAgent(BaseAgent):
             extracted_locs=source.get("extracted_locations"),
         )
 
-        # Call LLM with structured output
+        # Call LLM with inline JSON format (more reliable than Pydantic schema)
         try:
-            script: StructuredScript = await llm.generate_structured(
+            raw = await llm.generate_text(
                 system_prompt=system_prompt,
                 human_prompt=human_prompt,
-                schema=StructuredScript,
-                temperature=0.8,  # Creative writing benefits from slightly higher temp
+                temperature=0.8,
             )
+            import json
+            # Extract JSON from response (may have markdown fences)
+            data = json.loads(self._extract_json(raw))
+            script = StructuredScript.model_validate(data)
         except Exception as e:
-            # Fallback: try unstructured + parse
+            # Fallback: try structured method
             try:
-                raw = await llm.generate_text(system_prompt, human_prompt, temperature=0.8)
-                script = self._parse_raw_output(raw, project_id)
+                script = await llm.generate_structured(
+                    system_prompt=system_prompt,
+                    human_prompt=human_prompt,
+                    schema=StructuredScript,
+                    temperature=0.8,
+                )
             except Exception:
                 raise RuntimeError(f"Script generation failed: {e}") from e
 
@@ -255,16 +262,30 @@ class ScriptWriterAgent(BaseAgent):
             "4. 写出 **视觉可表达的内容**——动作、表情、环境变化，而非抽象心理描写",
             "5. 角色对话中注入 **情绪标签**（emotion_tag）和 **动作标注**（action_tag），让画面有依据",
             "",
-            "## 输出格式",
-            "你必须输出完整的 JSON 结构，包含以下字段:",
-            "- **global_context**: 世界观设定(story_world)、力量体系(power_system)、时间线(timeline)",
-            "- **episodes[]**: 每集含 title/hook/cliffhanger/summary/scenes[]",
-            "- **scenes[]**: 每场含 scene_id/location/characters_present/content/props_mentioned/visual_emphasis",
-            "- **content.segments[]**: 每段含 type(narration|dialogue|action|inner_monologue|voice_over|transition)/text/emotion_tag/action_tag",
-            "- **character_index[]**: 角色汇总(ref_name/role_type/traits_from_script/relationships)",
-            "- **location_index[]**: 场景汇总(name/scene_count/variations)",
-            "- **prop_index[]**: 道具汇总(name/importance/description_from_script)",
+            "## 输出格式 (严格JSON, 不要markdown代码块, 不要解释)",
+            '{',
+            '  "global_context": {"story_world": {"setting": "世界观", "era": "时代", "rules": []}, "power_system": {"name": "", "levels": [], "rules": ""}, "timeline": []},',
+            '  "episodes": [{',
+            '    "episode_index": 1, "title": "标题", "hook": "开头钩子", "cliffhanger": "结尾悬念", "summary": "概要",',
+            '    "scenes": [{',
+            '      "scene_id": "SC-E001-S001", "scene_index": 1,',
+            '      "location": {"name": "地点", "time_of_day": "night", "weather": "", "mood": "紧张"},',
+            '      "characters_present": [{"character_ref": "角色名", "emotional_state": "情绪"}],',
+            '      "props_mentioned": [], "visual_emphasis": [],',
+            '      "content": {"segments": [',
+            '        {"type": "narration", "text": "旁白内容"},',
+            '        {"type": "dialogue", "character_ref": "说话人", "text": "对白", "emotion_tag": "愤怒", "action_tag": "拍桌"},',
+            '        {"type": "action", "text": "动作描述", "action_tag": "拔剑", "emotion_tag": "坚定"},',
+            '        {"type": "inner_monologue", "character_ref": "角色", "text": "内心独白"},',
+            '      ]}',
+            '    }]',
+            '  }],',
+            '  "character_index": [{"ref_name": "角色名", "role_type": "protagonist", "traits_from_script": ["特征1"]}],',
+            '  "location_index": [{"name": "地点名", "scene_count": 1}],',
+            '  "prop_index": [{"name": "道具名", "importance": "key_item", "description_from_script": "描述"}]',
+            '}',
             "",
+            "直接输出上述格式的JSON，不要用```json```包裹。所有内容用中文。",
             "## 中国漫剧特色",
             "- 节奏要快，不要拖沓——前3句话就要抓住观众",
             "- 每集末尾必须有'欲知后事如何'的钩子",
@@ -464,6 +485,22 @@ class ScriptWriterAgent(BaseAgent):
                 f"   建议: {issue.suggestion or '请自行优化'}\n"
             )
         return "\n".join(lines)
+
+    def _extract_json(self, text: str) -> str:
+        """Extract and clean JSON from LLM output (handles common LLM JSON errors)."""
+        import re
+        # Remove markdown fences
+        text = re.sub(r'```(?:json)?\s*', '', text)
+        text = re.sub(r'```\s*$', '', text)
+        # Find the outermost JSON object
+        match = re.search(r"\{[\s\S]*\}", text)
+        if not match:
+            return text
+        result = match.group(0)
+        # Remove trailing commas (common LLM JSON error)
+        result = re.sub(r',\s*}', '}', result)
+        result = re.sub(r',\s*]', ']', result)
+        return result
 
     def _parse_raw_output(self, raw_text: str, project_id: str) -> StructuredScript:
         """Attempt to parse unstructured LLM output into StructuredScript."""

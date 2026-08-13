@@ -251,8 +251,12 @@ class MockLLMService:
         return schema.model_validate(self.script)
 
     async def generate_text(self, system_prompt: str, human_prompt: str, **kwargs) -> str:
-        """Return mock review feedback as JSON text."""
+        """Return mock data as JSON text."""
         self.text_call_count += 1
+        # If it looks like a script generation prompt, return the sample script
+        if "编剧" in system_prompt or "剧本" in system_prompt:
+            return json.dumps(self.script, ensure_ascii=False)
+        # Otherwise return review feedback
         return json.dumps({
             "issues": [
                 {
@@ -348,7 +352,7 @@ class TestScriptWriterAgent:
         assert "script_id" in result
         assert result["script_id"].startswith("SCR-")
         assert len(result["episodes"]) == 1
-        assert mock_llm.structured_call_count >= 1
+        assert mock_llm.text_call_count >= 1  # Writer now uses generate_text()
 
     @pytest.mark.asyncio
     async def test_writer_prompt_contains_genre_info(self):

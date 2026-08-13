@@ -7,10 +7,15 @@ Provides a singleton factory that reads configuration from app settings.
 from functools import lru_cache
 from typing import Any, Literal
 
-from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+
+try:
+    from langchain_anthropic import ChatAnthropic
+    _has_anthropic = True
+except ImportError:
+    _has_anthropic = False
 from pydantic import BaseModel, Field
 
 from app.config import settings
@@ -22,6 +27,7 @@ class LLMConfig(BaseModel):
     provider: Literal["openai", "anthropic"] = "openai"
     model: str = "gpt-4o"
     api_key: str = ""
+    base_url: str = ""  # Custom endpoint (DeepSeek: https://api.deepseek.com/v1)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=16000, ge=100, le=200000)
 
@@ -75,14 +81,19 @@ class LLMService:
         max_tok = overrides.pop("max_tokens", self.config.max_tokens)
 
         if self.is_openai:
-            return ChatOpenAI(
+            kwargs: dict[str, Any] = dict(
                 model=self.config.model,
                 api_key=self.config.api_key,
                 temperature=temp,
                 max_tokens=max_tok,
-                **overrides,
             )
+            if self.config.base_url:
+                kwargs["base_url"] = self.config.base_url
+            kwargs.update(overrides)
+            return ChatOpenAI(**kwargs)
         else:
+            if not _has_anthropic:
+                raise ImportError("langchain_anthropic not installed. pip install langchain-anthropic")
             return ChatAnthropic(
                 model=self.config.model,
                 api_key=self.config.api_key,
@@ -117,21 +128,42 @@ class LLMService:
     ) -> BaseModel:
         """One-shot: generate structured output from prompts.
 
-        Args:
-            system_prompt: System-level instruction.
-            human_prompt: User-level input.
-            schema: Pydantic model to constrain the output.
-            **overrides: LLMConfig overrides for this call.
-
-        Returns:
-            An instance of `schema` populated by the LLM.
+        Uses raw OpenAI-compatible JSON mode (more portable than LangChain's
+        with_structured_output, works with DeepSeek and other providers).
         """
-        structured_model = self.get_structured_model(schema, **overrides)
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=human_prompt),
-        ]
-        return await structured_model.ainvoke(messages)
+        import json as _json
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(
+            api_key=self.config.api_key,
+            base_url=self.config.base_url or None,
+        )
+
+        # Build a compact schema description (Pydantic JSON Schema is too verbose)
+        schema_desc = self._compact_schema(schema)
+
+        full_system = f"""{system_prompt}
+
+OUTPUT FORMAT: Respond ONLY with a valid JSON object (no markdown, no explanation).
+JSON structure:
+{schema_desc}"""
+
+        temp = overrides.pop("temperature", self.config.temperature)
+
+        resp = await client.chat.completions.create(
+            model=self.config.model,
+            messages=[
+                {"role": "system", "content": full_system},
+                {"role": "user", "content": human_prompt},
+            ],
+            response_format={"type": "json_object"},
+            temperature=temp,
+            max_tokens=overrides.pop("max_tokens", self.config.max_tokens),
+            **overrides,
+        )
+
+        raw = resp.choices[0].message.content or "{}"
+        return schema.model_validate(_json.loads(raw))
 
     async def generate_text(
         self,
@@ -156,6 +188,55 @@ class LLMService:
         ]
         response = await model.ainvoke(messages)
         return str(response.content)
+
+    def _compact_schema(self, schema: type[BaseModel]) -> str:
+        """Build a compact, human-readable schema description for the prompt.
+
+        Pydantic's model_json_schema() is too verbose for LLM context windows.
+        """
+        props = schema.model_fields
+        lines = ["{"]
+
+        for name, field in props.items():
+            annotation = field.annotation
+            required = field.is_required()
+            prefix = "" if required else "// optional"
+
+            if hasattr(annotation, "__args__"):
+                args = getattr(annotation, "__args__", ())
+                # List[X]
+                if getattr(annotation, "__origin__", None) is list:
+                    inner = args[0] if args else str
+                    inner_name = getattr(inner, "__name__", str(inner))
+                    lines.append(f'  {prefix}"{name}": [{inner_name}, ...],')
+                # Literal
+                elif hasattr(args[0], "__args__") if args else False:
+                    lines.append(f'  {prefix}"{name}": "...",')
+                # Optional[X] / X | None
+                elif type(None) in args:
+                    inner = [a for a in args if a is not type(None)][0]
+                    inner_name = getattr(inner, "__name__", str(inner))
+                    lines.append(f'  {prefix}"{name}": {inner_name} | null,')
+                else:
+                    lines.append(f'  {prefix}"{name}": "...",')
+            elif isinstance(annotation, type) and issubclass(annotation, BaseModel):
+                # Nested model — recurse with indent
+                nested = self._compact_schema(annotation)
+                indented = "\n".join("  " + l for l in nested.split("\n"))
+                lines.append(f'  {prefix}"{name}": {indented},')
+            elif annotation is str:
+                lines.append(f'  {prefix}"{name}": "...",')
+            elif annotation is int:
+                lines.append(f'  {prefix}"{name}": 0,')
+            elif annotation is bool:
+                lines.append(f'  {prefix}"{name}": true,')
+            elif annotation is float:
+                lines.append(f'  {prefix}"{name}": 0.0,')
+            else:
+                lines.append(f'  {prefix}"{name}": "...",')
+
+        lines.append("}")
+        return "\n".join(lines)
 
     # ── Cost Estimation ──
 
@@ -186,6 +267,7 @@ def create_llm_service_from_settings() -> LLMService:
             provider="openai",
             model=settings.openai_model,
             api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url,
         )
     else:
         raise ValueError(

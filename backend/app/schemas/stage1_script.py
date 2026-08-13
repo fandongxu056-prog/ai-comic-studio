@@ -83,7 +83,7 @@ class ContinuityScope(str, Enum):
 class ScriptSegment(BaseModel):
     """A single segment within a scene — dialogue, narration, action, etc."""
 
-    type: SegmentType = Field(description="片段类型: narration/dialogue/action/inner_monologue/voice_over/transition")
+    type: str = Field(description="片段类型: narration/dialogue/action/inner_monologue/voice_over/transition/cliffhanger")
     text: str = Field(description="片段正文内容")
     character_ref: str | None = Field(default=None, description="说话人引用名 (dialogue/inner_monologue 时必填)")
     emotion_tag: str | None = Field(default=None, description="情绪标签, 如 '愤怒' '冷笑' '哽咽'")
@@ -105,7 +105,7 @@ class SceneLocation(BaseModel):
     """Location information for a scene."""
 
     name: str = Field(description="地点名称")
-    time_of_day: TimeOfDay | None = Field(default=None, description="时间")
+    time_of_day: str | None = Field(default=None, description="时间(dawn/morning/noon/afternoon/evening/dusk/night/midnight)")
     weather: str | None = Field(default=None, description="天气")
     mood: str | None = Field(default=None, description="场景情绪基调")
     description: str | None = Field(default=None, max_length=1000, description="地点描述")
@@ -189,8 +189,8 @@ class GlobalContext(BaseModel):
 
     story_world: StoryWorld = Field(default_factory=StoryWorld, description="世界观")
     power_system: PowerSystem = Field(default_factory=PowerSystem, description="力量体系")
-    timeline: list[TimelineEvent] = Field(default_factory=list, description="关键事件时间线")
-    continuity_rules: list[ContinuityRule] = Field(default_factory=list, description="连续性规则")
+    timeline: list[dict] = Field(default_factory=list, description="关键事件时间线")
+    continuity_rules: list[dict] = Field(default_factory=list, description="连续性规则")
 
 
 # ── Indexes (auto-computed from episodes) ──

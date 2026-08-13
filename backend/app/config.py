@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     # ── LLM ──
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
+    openai_base_url: str = ""  # 留空=OpenAI官方, DeepSeek填 https://api.deepseek.com/v1
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5-20251001"
 

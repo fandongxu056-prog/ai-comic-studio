@@ -201,13 +201,13 @@ def build_stage3_graph(
     return graph
 
 
-def create_stage3_graph():
+def create_stage3_graph(llm_service=None):
     """Factory to create a compiled Stage 3 graph."""
     from app.agents.stage3_storyboard.shot_composer import ShotComposerAgent
     from app.agents.stage3_storyboard.pacing_director import PacingDirectorAgent
     from app.agents.stage3_storyboard.continuity_check import ContinuityCheckAgent
 
-    sc = ShotComposerAgent()
+    sc = ShotComposerAgent(llm_service=llm_service)
     pd = PacingDirectorAgent()
     cc = ContinuityCheckAgent()
 

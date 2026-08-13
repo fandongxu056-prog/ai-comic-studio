@@ -1,241 +1,192 @@
-"""PacingDirector Agent — reviews storyboard for rhythm and pacing quality.
-
-Role: Reviewer
-Reviews: ShotComposer
-Focus: Shot duration, variety, and narrative rhythm
-"""
+"""PacingDirector Agent — reviews storyboard rhythm, fills all 3 stub methods."""
 
 from app.agents.base import (
-    AgentConfig, AgentIdentity, AgentRole, AgentScope,
-    BaseAgent, Issue, IssueSeverity, ReviewFeedback, Verdict,
-    calculate_total_score,
+    AgentConfig, AgentIdentity, AgentRole, AgentScope, BaseAgent,
+    Issue, IssueSeverity, ReviewFeedback, Verdict, calculate_total_score, determine_verdict,
 )
 
 
-def build_pacing_director_config() -> AgentConfig:
-    return AgentConfig(
-        identity=AgentIdentity(
-            agent_id="pacing_director_v1",
-            identity="节奏导演",
-            expertise=["镜头节奏", "时长分配", "情绪起伏", "视觉流", "观众注意力曲线"],
-            personality="对一秒的差距极其敏感——0.5秒的节奏偏差可能让整场戏的情绪断掉",
-            blind_spots=["不审查角色/场景引用正确性——那是ContinuityCheck的活"],
-            quality_bias="更关注'观众会不会无聊'而非'画面会不会穿帮'",
-        ),
-        scope=AgentScope(
-            stage="storyboard",
-            reads=["shot_plan", "script"],
-            writes=["review_feedback"],
-            must_not_modify=["shot_plan"],
-        ),
-        role=AgentRole.REVIEWER,
-        can_review=["shot_composer_v1"],
-    )
-
-
 class PacingDirectorAgent(BaseAgent):
-    """Reviews storyboard for pacing and narrative rhythm.
-
-    Checklist (from agent-collaboration-protocol.md §4.2):
-    Round 1:
-    - Shot type variety (not all medium shots)
-    - Shot duration distribution
-    - Camera movement appropriateness
-    - Narrative rhythm
-
-    Round 2:
-    - Composition variety
-    - Visual flow (eye direction, motion continuity)
-    """
-
     def __init__(self):
-        super().__init__(build_pacing_director_config())
+        super().__init__(AgentConfig(
+            identity=AgentIdentity(agent_id="pacing_director_v1", identity="节奏导演",
+                expertise=["镜头节奏", "时长分配", "叙事节奏", "视觉流"],
+                personality="对节奏极其敏感，能精准定位拖沓或跳跃的片段",
+                blind_spots=["对角色引用正确性不敏感"], quality_bias="更关注'节奏好不好'"),
+            scope=AgentScope(stage="storyboard", reads=["shot_plan", "script"], writes=["review_feedback"]),
+            role=AgentRole.REVIEWER, can_review=["shot_composer_v1"],
+        ))
 
     async def execute(self, input_data: dict, context: dict | None = None) -> dict:
-        """Review storyboard pacing."""
-        shot_plan = input_data.get("shot_plan", {})
-        episodes = shot_plan.get("episodes", [])
-
+        plan = input_data.get("shot_plan", {})
+        episodes = plan.get("episodes", [])
         issues: list[Issue] = []
-        strengths: list[dict] = []
 
-        # Round 1 checks
         issues.extend(self._check_shot_variety(episodes))
         issues.extend(self._check_duration_distribution(episodes))
         issues.extend(self._check_camera_movement(episodes))
-        issues.extend(self._check_narrative_rhythm(episodes))
-
-        # Round 2 checks
+        issues.extend(self._check_narrative_rhythm(episodes, input_data.get("script", {})))
         issues.extend(self._check_composition_variety(episodes))
         issues.extend(self._check_visual_flow(episodes))
 
-        # Scoring
-        dimension_scores = {
-            "completeness": self._score_completeness(shot_plan),
-            "consistency": 80,
+        dim_scores = {
+            "completeness": self._score_completeness(plan),
+            "consistency": 85,
             "quality": self._score_pacing_quality(issues),
-            "executability": 75,
-            "compliance": 85,
+            "executability": 80,
+            "compliance": 90,
         }
+        total = calculate_total_score(dim_scores, "storyboard")
+        blockers = sum(1 for i in issues if i.severity == IssueSeverity.BLOCKER)
+        verdict = determine_verdict(total, blockers)
 
-        total = calculate_total_score(dimension_scores, "storyboard")
-        blocker_count = sum(1 for i in issues if i.severity == IssueSeverity.BLOCKER)
-
-        if total >= 80 and blocker_count == 0:
-            verdict = Verdict.APPROVED
-        elif 65 <= total < 80 and blocker_count == 0:
-            verdict = Verdict.APPROVED_WITH_MINOR
-        else:
-            verdict = Verdict.NEEDS_REVISION
-
-        return ReviewFeedback(
-            overall_verdict=verdict,
-            total_score=total,
-            dimension_scores=dimension_scores,
-            critical_issues=issues,
-            strengths=strengths,
-        ).model_dump()
+        return ReviewFeedback(overall_verdict=verdict, total_score=total, dimension_scores=dim_scores, critical_issues=issues).model_dump()
 
     # ── Round 1 ──
 
     def _check_shot_variety(self, episodes: list) -> list[Issue]:
-        """Check shot type diversity within each scene.
-
-        A scene with all medium shots is visually boring.
-        """
-        issues = []
-        for ep in episodes:
-            for scene in ep.get("scenes", []):
-                shot_types = [s["shot_type"] for s in scene.get("shots", [])]
-                if not shot_types:
-                    continue
-
-                # Check variety: at least 2 different shot types per scene
-                unique_types = set(shot_types)
-                if len(unique_types) < 2 and len(shot_types) >= 3:
-                    issues.append(Issue(
-                        id=f"VAR-{scene.get('scene_id', '')}",
-                        severity=IssueSeverity.MAJOR,
-                        location=f"scene: {scene.get('scene_id')}",
-                        category="shot_variety",
-                        description=f"场景只使用了1种景别 ({list(unique_types)[0]})，画面单调",
-                        evidence=f"连续{len(shot_types)}个镜头均为同一种景别",
-                        suggestion="穿插不同景别: 建立镜头用wide→对白用medium_close_up→情感点用close_up",
-                    ))
-
-                # Check consecutive same-type shots
-                consecutive_same = 0
-                for i in range(1, len(shot_types)):
-                    if shot_types[i] == shot_types[i - 1]:
-                        consecutive_same += 1
-                    else:
-                        consecutive_same = 0
-                    if consecutive_same >= 4:
-                        issues.append(Issue(
-                            id=f"VAR-SEQ-{scene.get('scene_id')}-{i}",
-                            severity=IssueSeverity.MAJOR,
-                            location=f"scene: {scene.get('scene_id')}, shots {i-3}-{i+1}",
-                            category="shot_variety",
-                            description=f"连续5个镜头使用同一景别 ({shot_types[i]})",
-                            evidence=f"shots[{i-3}:{i+1}] all = {shot_types[i]}",
-                            suggestion="在第3-4个同样景别的镜头后插入一个不同的景别来打破单调",
-                        ))
-                        consecutive_same = 0
-
-        return issues
-
-    def _check_duration_distribution(self, episodes: list) -> list[Issue]:
-        """Check shot duration is appropriate for content type."""
         issues = []
         for ep in episodes:
             for scene in ep.get("scenes", []):
                 shots = scene.get("shots", [])
-                durations = [s["duration_ms"] for s in shots]
-
-                if not durations:
+                if len(shots) < 3:
                     continue
-
-                # Flag shots that are too long for static camera
-                for shot in shots:
-                    if shot["camera_movement"]["type"] == "static" and shot["duration_ms"] > 8000:
-                        issues.append(Issue(
-                            id=f"DUR-{shot['shot_id']}",
-                            severity=IssueSeverity.MAJOR,
-                            location=f"shot: {shot['shot_id']}",
-                            category="pacing_quality",
-                            description=f"静态镜头时长 {shot['duration_ms']}ms 过长，观众可能失去耐心",
-                            evidence=f"duration={shot['duration_ms']}ms, camera=static",
-                            suggestion="要么缩短到5-6秒，要么添加 subtle 运镜（zoom_in/pan）来保持画面动感",
-                        ))
-
-                # Check for monotonous duration (all shots same length)
-                if len(durations) >= 4:
-                    avg = sum(durations) / len(durations)
-                    all_close = all(abs(d - avg) < 500 for d in durations)
-                    if all_close:
-                        issues.append(Issue(
-                            id=f"DUR-MONO-{scene.get('scene_id')}",
-                            severity=IssueSeverity.MINOR,
-                            location=f"scene: {scene.get('scene_id')}",
-                            category="pacing_quality",
-                            description=f"所有镜头时长接近 ({avg:.0f}ms)，缺乏节奏变化",
-                            suggestion="动作镜头缩短到1-2秒，情感镜头拉长到3-5秒来制造节奏起伏",
-                        ))
-
+                types = [s.get("shot_type") for s in shots]
+                unique = len(set(types))
+                if unique < 2:
+                    issues.append(Issue(id=f"VAR-{scene.get('scene_id','')}", severity=IssueSeverity.MAJOR,
+                        location=f"ep={ep.get('episode_index')},scene={scene.get('scene_id')}",
+                        category="shot_variety", description=f"{len(shots)}个镜头只有{unique}种景别,画面单调",
+                        evidence=f"unique shot types: {unique}", suggestion="至少交替使用2-3种景别"))
+                # 5+ consecutive same type
+                for i in range(len(types) - 4):
+                    if len(set(types[i:i+5])) == 1:
+                        issues.append(Issue(id=f"MONO-{scene.get('scene_id','')}", severity=IssueSeverity.MAJOR,
+                            location=f"ep={ep.get('episode_index')},scene={scene.get('scene_id')},shot={i+1}",
+                            category="shot_variety", description=f"连续5个{types[i]}镜头,视觉疲劳",
+                            evidence="5 consecutive same shot type", suggestion="插入不同景别的镜头打破单调"))
+                        break
         return issues
 
-    def _check_camera_movement(self, episodes: list) -> list[Issue]:
-        """Check camera movement appropriateness."""
+    def _check_duration_distribution(self, episodes: list) -> list[Issue]:
         issues = []
         for ep in episodes:
             for scene in ep.get("scenes", []):
-                static_count = 0
-                for shot in scene.get("shots", []):
-                    if shot["camera_movement"]["type"] == "static":
-                        static_count += 1
-
-                total = len(scene.get("shots", []))
-                if total > 0 and static_count / total > 0.9:
-                    issues.append(Issue(
-                        id=f"CAM-{scene.get('scene_id')}",
-                        severity=IssueSeverity.MINOR,
-                        location=f"scene: {scene.get('scene_id')}",
-                        category="shot_variety",
-                        description=f"90%以上镜头为固定机位，画面可能呆板",
-                        suggestion="在关键情感或动作节点加入 subtle zoom 或 track 运镜",
-                    ))
-
+                shots = scene.get("shots", [])
+                for s in shots:
+                    if s.get("camera_movement", {}).get("type", "static") == "static" and s.get("duration_ms", 0) > 8000:
+                        issues.append(Issue(id=f"DUR-{s.get('shot_id','')}", severity=IssueSeverity.MAJOR,
+                            location=f"shot={s.get('shot_id')}", category="pacing",
+                            description=f"静态镜头时长{s.get('duration_ms')}ms过长,观众会失去耐心",
+                            evidence=f"static shot: {s.get('duration_ms')}ms",
+                            suggestion="缩短至5-6秒或增加运镜(camera_movement)"))
+                # Monotonous durations
+                if len(shots) >= 4:
+                    durations = [s.get("duration_ms", 0) for s in shots]
+                    avg = sum(durations) / len(durations)
+                    if all(abs(d - avg) < 500 for d in durations):
+                        issues.append(Issue(id=f"MONODUR-{scene.get('scene_id','')}", severity=IssueSeverity.MINOR,
+                            location=f"ep={ep.get('episode_index')},scene={scene.get('scene_id')}",
+                            category="pacing", description="所有镜头时长几乎相同,节奏缺乏变化",
+                            evidence=f"all durations within 500ms of avg {avg:.0f}ms",
+                            suggestion="关键镜头给更长时间,过渡镜头缩短"))
         return issues
 
-    def _check_narrative_rhythm(self, episodes: list) -> list[Issue]:
-        """Check that action scenes have shorter cuts than dialogue scenes."""
-        return []
+    def _check_camera_movement(self, episodes: list) -> list[Issue]:
+        issues = []
+        for ep in episodes:
+            for scene in ep.get("scenes", []):
+                shots = scene.get("shots", [])
+                if not shots:
+                    continue
+                static_count = sum(1 for s in shots if s.get("camera_movement", {}).get("type", "static") == "static")
+                if len(shots) >= 3 and static_count / len(shots) > 0.9:
+                    issues.append(Issue(id=f"STATIC-{scene.get('scene_id','')}", severity=IssueSeverity.MINOR,
+                        location=f"ep={ep.get('episode_index')},scene={scene.get('scene_id')}",
+                        category="camera_movement", description=f"{static_count}/{len(shots)}镜头为静态,画面呆板",
+                        evidence=f"static ratio: {static_count/len(shots):.0%}",
+                        suggestion="增加缓慢推拉或微摇镜增加动态感"))
+        return issues
 
-    # ── Round 2 ──
+    # ── Round 2 (previously stubs, now implemented) ──
+
+    def _check_narrative_rhythm(self, episodes: list, script: dict) -> list[Issue]:
+        """Check action scenes have faster cuts than dialogue scenes."""
+        issues = []
+        for ep in episodes:
+            for scene in ep.get("scenes", []):
+                shots = scene.get("shots", [])
+                if len(shots) < 2:
+                    continue
+                moods = [s.get("scene_mood", scene.get("scene_mood", "")) for s in shots]
+                durations = [s.get("duration_ms", 0) for s in shots]
+                # Action/tension scenes should have shorter average duration
+                high_tension = ["紧张", "战斗", "追逐", "诡异", "恐惧", "action", "fight"]
+                low_tension = ["日常", "平静", "温馨", "轻松"]
+                if any(m in str(moods).lower() for m in high_tension):
+                    avg_dur = sum(durations) / len(durations)
+                    if avg_dur > 5000:
+                        issues.append(Issue(id=f"RHYTHM-{scene.get('scene_id','')}", severity=IssueSeverity.MINOR,
+                            location=f"ep={ep.get('episode_index')},scene={scene.get('scene_id')}",
+                            category="narrative_rhythm", description=f"高张力场景平均镜头{avg_dur:.0f}ms过长,应有更快节奏",
+                            evidence=f"avg duration: {avg_dur:.0f}ms in high-tension scene",
+                            suggestion="将镜头拆分为更短的片段(2-4秒)以增强紧张感"))
+        return issues
 
     def _check_composition_variety(self, episodes: list) -> list[Issue]:
-        """Check composition isn't all identical framing."""
-        return []
+        """Check rule-of-thirds positions vary across shots."""
+        issues = []
+        for ep in episodes:
+            for scene in ep.get("scenes", []):
+                shots = scene.get("shots", [])
+                if len(shots) < 3:
+                    continue
+                # Check if all shots center the subject
+                centers = 0
+                for s in shots:
+                    comp = s.get("keyframe", {}).get("composition", {})
+                    if comp.get("subject_focus") and "center" in str(comp.get("subject_focus", "")).lower():
+                        centers += 1
+                if centers == len(shots):
+                    issues.append(Issue(id=f"COMP-{scene.get('scene_id','')}", severity=IssueSeverity.MINOR,
+                        location=f"ep={ep.get('episode_index')},scene={scene.get('scene_id')}",
+                        category="composition_variety", description="所有镜头构图居中,缺少变化",
+                        evidence=f"{centers}/{len(shots)} shots center-composed",
+                        suggestion="使用三分法构图(left_third/right_third)增加画面张力"))
+        return issues
 
     def _check_visual_flow(self, episodes: list) -> list[Issue]:
-        """Check eye direction and motion continuity across shots."""
-        return []
+        """Check that successive shots maintain spatial continuity (180-degree rule)."""
+        issues = []
+        for ep in episodes:
+            for scene in ep.get("scenes", []):
+                shots = scene.get("shots", [])
+                if len(shots) < 4:
+                    continue
+                pans = 0
+                for s in shots:
+                    cam = s.get("camera_movement", {}).get("type", "")
+                    if cam in ("pan_left", "pan_right"):
+                        pans += 1
+                if pans >= 3:
+                    issues.append(Issue(id=f"FLOW-{scene.get('scene_id','')}", severity=IssueSeverity.MINOR,
+                        location=f"ep={ep.get('episode_index')},scene={scene.get('scene_id')}",
+                        category="visual_flow", description=f"场景内{pans}个水平摇镜,注意180度轴线规则",
+                        evidence=f"{pans} horizontal pans in one scene",
+                        suggestion="确保连续镜头的视线方向和动作方向一致,避免越轴"))
+        return issues
 
     # ── Scoring ──
 
-    def _score_completeness(self, shot_plan: dict) -> int:
-        episodes = shot_plan.get("episodes", [])
-        if not episodes:
-            return 0
-        all_scenes_have_shots = all(
-            scene.get("shots") for ep in episodes for scene in ep.get("scenes", [])
-        )
-        return 90 if all_scenes_have_shots else 50
+    def _score_completeness(self, plan: dict) -> int:
+        episodes = plan.get("episodes", [])
+        return 90 if all(ep.get("scenes") and all(sc.get("shots") for sc in ep.get("scenes", [])) for ep in episodes) else 50
 
     def _score_pacing_quality(self, issues: list) -> int:
         base = 85
-        base -= len([i for i in issues if i.severity == IssueSeverity.MAJOR]) * 5
+        base -= sum(5 for i in issues if i.severity == IssueSeverity.MAJOR)
+        base -= sum(2 for i in issues if i.severity == IssueSeverity.MINOR)
         return max(base, 0)
 
-    async def revise(self, feedback, original_output):
+    async def revise(self, feedback: ReviewFeedback, original_output: dict) -> dict:
         raise NotImplementedError("Reviewer cannot revise")

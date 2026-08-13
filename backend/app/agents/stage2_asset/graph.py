@@ -200,15 +200,15 @@ def build_stage2_graph(
     return graph
 
 
-def create_stage2_graph():
+def create_stage2_graph(llm_service=None):
     """Factory to create a compiled Stage 2 graph."""
     from app.agents.stage2_asset.character_designer import CharacterDesignerAgent
     from app.agents.stage2_asset.scene_designer import SceneDesignerAgent
     from app.agents.stage2_asset.prop_designer import PropDesignerAgent
     from app.agents.stage2_asset.consistency_auditor import ConsistencyAuditorAgent
 
-    cd = CharacterDesignerAgent()
-    sd = SceneDesignerAgent()
+    cd = CharacterDesignerAgent(llm_service=llm_service)
+    sd = SceneDesignerAgent(llm_service=llm_service)
     pd = PropDesignerAgent()
     ca = ConsistencyAuditorAgent()
 

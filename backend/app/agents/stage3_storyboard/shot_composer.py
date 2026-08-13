@@ -1,9 +1,6 @@
-"""ShotComposer Agent — translates script + assets into detailed shot plan.
+"""ShotComposer Agent — translates script + assets into detailed shot plan."""
 
-Role: Author
-Reviews from: PacingDirector, ContinuityCheck
-Design reference: docs/agent-collaboration-protocol.md §4
-"""
+from typing import Any
 
 from app.agents.base import (
     AgentConfig, AgentIdentity, AgentRole, AgentScope,
@@ -47,9 +44,10 @@ class ShotComposerAgent(BaseAgent):
     - VFX and audio notes
     """
 
-    def __init__(self):
+    def __init__(self, llm_service: Any = None):
         super().__init__(build_shot_composer_config())
         self.seed_manager: SeedManager | None = None
+        self.llm_service = llm_service
 
     async def execute(self, input_data: dict, context: dict | None = None) -> dict:
         """Generate a complete shot plan from script and assets.

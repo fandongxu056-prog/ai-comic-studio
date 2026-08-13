@@ -258,7 +258,7 @@ class PipelineRunner:
         """Run Stage 2: Asset design with parallel design + audit."""
         from app.agents.stage2_asset.graph import create_stage2_graph
 
-        graph = create_stage2_graph()
+        graph = create_stage2_graph(llm_service=self.llm_service)
         initial_state = {
             "project_id": self.project_id,
             "iteration": 1,
@@ -293,7 +293,7 @@ class PipelineRunner:
         """Run Stage 3: Storyboard composition with parallel review."""
         from app.agents.stage3_storyboard.graph import create_stage3_graph
 
-        graph = create_stage3_graph()
+        graph = create_stage3_graph(llm_service=self.llm_service)
         initial_state = {
             "project_id": self.project_id,
             "iteration": 1,
