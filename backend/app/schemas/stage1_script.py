@@ -189,8 +189,8 @@ class GlobalContext(BaseModel):
 
     story_world: StoryWorld = Field(default_factory=StoryWorld, description="世界观")
     power_system: PowerSystem = Field(default_factory=PowerSystem, description="力量体系")
-    timeline: list[dict] = Field(default_factory=list, description="关键事件时间线")
-    continuity_rules: list[dict] = Field(default_factory=list, description="连续性规则")
+    timeline: list = Field(default_factory=list, description="关键事件时间线 (字符串或对象)")
+    continuity_rules: list = Field(default_factory=list, description="连续性规则")
 
 
 # ── Indexes (auto-computed from episodes) ──
@@ -211,7 +211,7 @@ class CharacterIndexEntry(BaseModel):
 
     ref_name: str = Field(description="角色引用名 (与 scene 中 character_ref 对应)")
     full_name: str | None = Field(default=None, description="全名")
-    role_type: RoleType = Field(description="角色类型")
+    role_type: str = Field(default="supporting", description="角色类型: protagonist/antagonist/supporting/cameo")
     scene_count: int = Field(default=0, ge=0, description="出场场景数")
     dialogue_count: int = Field(default=0, ge=0, description="对白段数")
     first_episode: int = Field(default=1, ge=1, description="首次出场集数")
@@ -232,7 +232,7 @@ class PropIndexEntry(BaseModel):
 
     name: str = Field(description="道具名称")
     scene_count: int = Field(default=0, ge=0, description="出现场景数")
-    importance: PropImportance = Field(default=PropImportance.ONE_OFF, description="重要程度")
+    importance: str = Field(default="one_off", description="重要程度: key_item/recurring/one_off")
     description_from_script: str = Field(default="", description="剧本中的道具描述")
 
 
@@ -264,7 +264,7 @@ class StructuredScript(BaseModel):
     version: int = Field(default=1, ge=1, description="版本号")
     created_at: str = Field(default="", description="创建时间 ISO 8601")
     updated_at: str = Field(default="", description="更新时间 ISO 8601")
-    status: ScriptStatus = Field(default=ScriptStatus.DRAFT, description="剧本状态")
+    status: str = Field(default="draft", description="剧本状态: draft/review/approved/locked")
 
     # Core content
     global_context: GlobalContext = Field(default_factory=GlobalContext, description="全局语境")
@@ -306,7 +306,7 @@ class StructuredScript(BaseModel):
         return {
             "script_id": self.script_id,
             "version": self.version,
-            "status": self.status.value,
+            "status": self.status,
             "episode_count": len(self.episodes),
             "scene_count": total_scenes,
             "segment_count": total_segments,

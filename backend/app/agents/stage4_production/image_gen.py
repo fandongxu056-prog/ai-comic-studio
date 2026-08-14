@@ -171,12 +171,58 @@ _provider_registry: dict[str, type[ImageProvider]] = {
     "dalle": OpenAIDalleProvider,
     "stable_diffusion": StableDiffusionProvider,
     "sdxl": StableDiffusionProvider,
+    "minimax": None,  # Lazy-loaded from minimax_image_provider.py
 }
 
 
 def create_image_provider(provider_name: str, **kwargs) -> ImageProvider:
-    """Factory to create an image provider instance."""
+    """Factory to create an image provider instance.
+
+    Supported: openai/dalle, stable_diffusion/sdxl, minimax (same key as video).
+    """
+    if provider_name == "minimax":
+        from app.agents.stage4_production.minimax_image_provider import MiniMaxImageProvider
+
+        class _MiniMaxImgAdapter(ImageProvider):
+            """Adapter: MiniMaxImageProvider → ImageProvider interface."""
+
+            def __init__(self, api_key: str = "", art_style: str = "anime", **kw):
+                self._provider = MiniMaxImageProvider(api_key=api_key, art_style=art_style)
+
+            async def generate(self, request: ImageGenRequest) -> ImageGenResult:
+                result = await self._provider.generate(
+                    shot_id=request.shot_id,
+                    prompt=request.prompt,
+                    negative_prompt=request.negative_prompt,
+                )
+                return ImageGenResult(
+                    shot_id=request.shot_id,
+                    success=result.success,
+                    image_url=result.image_url,
+                    seed_used=request.seed,
+                    actual_prompt=request.prompt,
+                    generation_time_ms=result.generation_time_ms,
+                    cost_usd=result.cost_estimate_usd,
+                    error_message=result.error_message,
+                )
+
+            def estimate_cost(self, request: ImageGenRequest) -> float:
+                return 0.02
+
+            @property
+            def provider_name(self) -> str:
+                return "minimax"
+
+            @property
+            def model_name(self) -> str:
+                return self._provider.model_name
+
+        return _MiniMaxImgAdapter(**kwargs)
+
     provider_cls = _provider_registry.get(provider_name)
     if not provider_cls:
-        raise ValueError(f"Unknown image provider: {provider_name}. Available: {list(_provider_registry.keys())}")
+        raise ValueError(
+            f"Unknown image provider: {provider_name}. "
+            f"Available: minimax, openai, dalle, stable_diffusion, sdxl"
+        )
     return provider_cls(**kwargs)

@@ -4,14 +4,16 @@ Endpoint: POST https://tokenhub.tencentmaas.com/v1/api/image/lite
 Auth: Bearer sk-xxx
 Model: hy-image-lite (fast, synchronous)
 
-Style consistency: All prompts are prefixed with "日漫动画风格" and end with
-"anime art style" — enforced by _ensure_anime_style().
+Style: dynamically injected from project art_style via StyleInjector
+(anime / realistic / 3d_render / etc.) — no longer hardcoded anime.
 """
 
 import time
 from typing import Optional
 
 import httpx
+
+from app.agents.stage4_production.style_injector import StyleInjector
 
 HUNYUAN_BASE_URL = "https://tokenhub.tencentmaas.com"
 HUNYUAN_MODEL = "hy-image-lite"
@@ -37,8 +39,10 @@ class HunyuanImageProvider:
     consistent visual style across every generated image.
     """
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, art_style: str = "anime"):
         self.api_key = api_key
+        self.art_style = art_style
+        self.injector = StyleInjector(art_style)
         self._client: Optional[httpx.AsyncClient] = None
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -61,19 +65,17 @@ class HunyuanImageProvider:
         seed: int = 0,
         resolution: str = "1280:720",
     ) -> HunyuanImageResult:
-        """Generate a single anime-style image via TokenHub lite endpoint.
+        """Generate a style-consistent image via TokenHub lite endpoint.
 
-        Style consistency guarantee:
-        - Every prompt is prefixed with "日漫动画风格"
-        - Conflicting terms (realistic, 3D, photograph) are removed
-        - Negative prompt is injected into the positive prompt
-          (lite endpoint may not support separate negative_prompt param)
+        Style follows self.art_style (anime/realistic/etc.) via StyleInjector.
+        Negative prompt is merged into the positive prompt (lite endpoint
+        may not support separate negative_prompt param).
         """
         client = await self._get_client()
         start_time = time.time()
 
-        # Build unified prompt with anime style enforcement
-        enhanced_prompt = self._ensure_anime_style(prompt, negative_prompt)
+        # Dynamic style injection
+        enhanced_prompt = self.injector.enhance_prompt(prompt, negative_prompt)
 
         try:
             body = {
@@ -128,51 +130,8 @@ class HunyuanImageProvider:
             )
 
     def _ensure_anime_style(self, prompt: str, negative_prompt: str = "") -> str:
-        """Guarantee consistent anime style across ALL generated images.
-
-        Strategy:
-        1. Remove conflicting style keywords (realistic, photorealistic, 3D, etc.)
-        2. Prefix with "日漫动画风格" if not present
-        3. Append "anime art style" if not present
-        4. Inject negative constraints directly into the prompt
-        """
-        # Remove conflicting style terms
-        conflicting = [
-            "realistic", "photorealistic", "3D render", "3d render",
-            "8k photo", "photograph", "hyper-realistic", "photo-realistic",
-            "realistic face", "realistic skin",
-        ]
-        cleaned = prompt
-        for term in conflicting:
-            cleaned = cleaned.replace(term, "")
-            cleaned = cleaned.replace(term.capitalize(), "")
-
-        # Build the final prompt with anime style guarantee
-        parts = []
-
-        # 1. Anime style prefix
-        if "日漫" not in cleaned and "动漫" not in cleaned:
-            parts.append("日漫动画风格")
-
-        # 2. Cleaned prompt
-        parts.append(cleaned.strip())
-
-        # 3. Negative constraints (lite endpoint: inject into prompt)
-        style_constraints = [
-            "flat color illustration",
-            "clean line art",
-            "consistent anime character design",
-            "no realistic textures",
-            "no 3D rendering",
-            "no photographic details",
-        ]
-        parts.append(", ".join(style_constraints))
-
-        # 4. Anime keyword
-        if "anime" not in cleaned.lower():
-            parts.append("anime art style")
-
-        return ", ".join(p for p in parts if p)
+        """Legacy alias — delegates to dynamic StyleInjector (anime style)."""
+        return self.injector.enhance_prompt(prompt, negative_prompt)
 
     async def close(self):
         if self._client:

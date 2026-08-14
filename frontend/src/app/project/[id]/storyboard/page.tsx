@@ -1,8 +1,11 @@
 import { useState } from "react";
+import { useParams } from "react-router-dom";
 import {
   LayoutGrid, Play, Camera, Clock, ChevronDown, ChevronUp,
   CheckCircle, ThumbsUp, ThumbsDown, RefreshCw, MessageSquare,
 } from "lucide-react";
+import { api } from "@/services/api";
+import { useStageData } from "@/hooks/use-stage-data";
 import { mockStoryboard } from "@/stores/mock-data";
 
 const SC = "var(--color-stage-storyboard)";
@@ -16,11 +19,23 @@ const angleLabels: Record<string, string> = {
 };
 
 export function StoryboardWorkspace() {
+  const { id } = useParams<{ id: string }>();
   const [epIdx, setEpIdx] = useState(0);
   const [expandedScene, setExpandedScene] = useState<number | null>(0);
   const [selectedShot, setSelectedShot] = useState<string | null>(null);
 
-  const storyboard = mockStoryboard;
+  const { data: storyboard } = useStageData<typeof mockStoryboard>({
+    mock: mockStoryboard,
+    fetch: async () => {
+      if (!id) return mockStoryboard;
+      const shots = await api.get<any>(`/storyboards/${id}/shots?episode=1`);
+      const epShots = shots.shots?.length ? shots.shots : null;
+      return epShots
+        ? { ...mockStoryboard, episodes: [{ ...mockStoryboard.episodes[0], scenes: epShots }] as typeof mockStoryboard.episodes }
+        : mockStoryboard;
+    },
+    hasData: (d) => d.episodes.length > 0,
+  });
   const ep = storyboard.episodes[epIdx];
   if (!ep) return null;
 

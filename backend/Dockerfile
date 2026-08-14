@@ -9,10 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Python dependencies (use China PyPI mirror for reliable installs)
+# Python dependencies (VPN proxy provides direct PyPI access)
 COPY pyproject.toml .
-RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && \
-    pip install --no-cache-dir -e ".[dev]" && pip install uvicorn[standard]
+COPY README.md .
+RUN pip install --no-cache-dir -e ".[dev]" && pip install uvicorn[standard]
 
 # Application code
 COPY . .

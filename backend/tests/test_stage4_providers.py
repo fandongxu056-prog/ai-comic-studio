@@ -116,20 +116,21 @@ class TestMiniMaxVideoProvider:
     """Test the MiniMax video provider."""
 
     def test_motion_prompt_building(self):
-        """Should build anime-style motion prompts."""
+        """Should build style-appropriate motion prompts (anime + realistic)."""
         from app.agents.stage4_production.minimax_video_provider import MiniMaxVideoProvider
 
+        # Anime style (default)
         provider = MiniMaxVideoProvider(api_key="test-key")
-
-        # With input prompt
         result = provider._build_motion_prompt("camera slowly pans left")
         assert "camera slowly pans left" in result
         assert "anime-style motion" in result
 
-        # Empty prompt
-        result = provider._build_motion_prompt("")
-        assert "gentle slow camera movement" in result or "breathing" in result
-        assert "anime art style" in result
+        # Realistic style — should NOT contain anime hints
+        realistic = MiniMaxVideoProvider(api_key="test-key", art_style="realistic")
+        result = realistic._build_motion_prompt("camera slowly pans left")
+        assert "camera slowly pans left" in result
+        assert "anime-style motion" not in result
+        assert "natural human motion" in result
 
     def test_cost_estimation(self):
         """Should estimate cost based on duration."""

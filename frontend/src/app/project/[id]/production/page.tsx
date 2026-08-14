@@ -1,9 +1,11 @@
+import { useParams } from "react-router-dom";
 import {
-
   Film, Pause, CheckCircle, Loader2, AlertTriangle, Clock,
   Image, Video, Music, Clapperboard, DollarSign, Download,
   BarChart3, Eye,
 } from "lucide-react";
+import { api } from "@/services/api";
+import { useStageData } from "@/hooks/use-stage-data";
 import { mockProduction } from "@/stores/mock-data";
 
 const SC = "var(--color-stage-production)";
@@ -18,7 +20,16 @@ const statusColors: Record<string, string> = {
 };
 
 export function ProductionWorkspace() {
-  const prod = mockProduction;
+  const { id } = useParams<{ id: string }>();
+  const { data: prod } = useStageData<typeof mockProduction>({
+    mock: mockProduction,
+    fetch: async () => {
+      if (!id) return mockProduction;
+      const status = await api.get<any>(`/productions/${id}/status`);
+      return (status.production_id ? { ...mockProduction, ...status } : mockProduction) as typeof mockProduction;
+    },
+    hasData: (d) => (d as any).production_id !== "PRD-0001" && (d as any).status !== "not_started",
+  });
 
   const byShot: Record<string, any> = prod.generated_assets.by_shot_id;
   const shots = Object.entries(byShot);

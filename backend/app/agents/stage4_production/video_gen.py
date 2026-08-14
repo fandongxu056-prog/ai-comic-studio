@@ -132,8 +132,8 @@ def create_video_provider(provider_name: str, **kwargs) -> VideoProvider:
         class _MiniMaxAdapter(VideoProvider):
             """Adapter to make MiniMaxVideoProvider conform to VideoProvider interface."""
 
-            def __init__(self, api_key: str = "", model: str = "video-01", **kw):
-                self._provider = MiniMaxVideoProvider(api_key=api_key, model=model)
+            def __init__(self, api_key: str = "", model: str = "video-01", art_style: str = "anime", **kw):
+                self._provider = MiniMaxVideoProvider(api_key=api_key, model=model, art_style=art_style)
 
             async def generate(self, request: VideoGenRequest) -> VideoGenResult:
                 result = await self._provider.generate(

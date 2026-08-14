@@ -5,8 +5,7 @@ Auth: Bearer <api_key>
 Model: video-01 (image-to-video), T2V-01 (text-to-video)
 Flow: Submit task → Poll GET /v1/query/video_generation?task_id={id} → Get video URL
 
-MiniMax is one of the leading Chinese AI video generation platforms,
-well-suited for anime/manga style motion generation.
+Style: dynamic via StyleInjector (anime/realistic/etc.).
 """
 
 import asyncio
@@ -14,6 +13,8 @@ import time
 from typing import Optional
 
 import httpx
+
+from app.agents.stage4_production.style_injector import StyleInjector
 
 MINIMAX_BASE_URL = "https://api.minimax.chat"
 MINIMAX_MODEL = "video-01"  # image-to-video model
@@ -56,9 +57,11 @@ class MiniMaxVideoProvider:
     API Reference: https://platform.minimax.chat
     """
 
-    def __init__(self, api_key: str, model: str = MINIMAX_MODEL):
+    def __init__(self, api_key: str, model: str = MINIMAX_MODEL, art_style: str = "anime"):
         self.api_key = api_key
         self.model = model
+        self.art_style = art_style
+        self.injector = StyleInjector(art_style)
         self._client: Optional[httpx.AsyncClient] = None
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -205,29 +208,12 @@ class MiniMaxVideoProvider:
             )
 
     def _build_motion_prompt(self, prompt: str) -> str:
-        """Build a motion-aware prompt suitable for anime-style video.
+        """Build a motion-aware prompt with style-appropriate hints.
 
         MiniMax works best with clear, action-oriented prompts describing
         what should MOVE in the scene, not what the scene contains.
         """
-        base = prompt.strip() if prompt else ""
-
-        # Anime-specific motion guidance
-        anime_hints = [
-            "smooth anime-style motion",
-            "consistent character appearance",
-            "subtle natural movement",
-        ]
-
-        if base:
-            return f"{base}. {', '.join(anime_hints)}"
-        else:
-            # Default motion: gentle Ken Burns + character idle animation
-            return (
-                "gentle slow camera movement, character subtle breathing animation, "
-                "hair and clothing slightly moving, anime art style, "
-                + ", ".join(anime_hints)
-            )
+        return self.injector.enhance_motion_prompt(prompt)
 
     def _estimate_cost(self, duration_ms: int) -> float:
         """Estimate cost based on video duration.

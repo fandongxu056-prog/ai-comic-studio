@@ -5,7 +5,7 @@ Model: wanx2.1-t2i-turbo
 Auth: Bearer sk-xxx
 Flow: Submit task → Poll GET /api/v1/tasks/{task_id} → Get image URL
 
-Key: supports consistent anime style through prompt engineering.
+Style: dynamic via StyleInjector (anime/realistic/etc.) — not hardcoded.
 """
 
 import asyncio
@@ -13,6 +13,8 @@ import time
 from typing import Optional
 
 import httpx
+
+from app.agents.stage4_production.style_injector import StyleInjector
 
 DASHSCOPE_BASE = "https://dashscope.aliyuncs.com"
 DASHSCOPE_MODEL = "wanx2.1-t2i-turbo"
@@ -39,8 +41,10 @@ class QwenImageProvider:
     - Maximum 1024 chars prompt
     """
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, art_style: str = "anime"):
         self.api_key = api_key
+        self.art_style = art_style
+        self.injector = StyleInjector(art_style)
         self._client: Optional[httpx.AsyncClient] = None
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -74,8 +78,8 @@ class QwenImageProvider:
         client = await self._get_client()
         start_time = time.time()
 
-        # Guarantee anime style consistency
-        enhanced_prompt = self._ensure_anime_style(prompt, negative_prompt)
+        # Dynamic style injection
+        enhanced_prompt = self.injector.enhance_prompt(prompt, negative_prompt)
 
         try:
             # Step 1: Submit task
@@ -145,28 +149,8 @@ class QwenImageProvider:
                 error_message=str(e), generation_time_ms=elapsed)
 
     def _ensure_anime_style(self, prompt: str, negative: str = "") -> str:
-        """Inject consistent anime style directives into every prompt.
-
-        THIS is the style consistency mechanism — every image gets the same
-        style prefix, ensuring the Wanx model stays in anime mode.
-        """
-        # Remove conflicting terms
-        for term in ["realistic", "photorealistic", "photograph", "3D render", "3d render"]:
-            prompt = prompt.replace(term, "").replace(term.capitalize(), "")
-
-        # Build unified prompt
-        parts = ["日漫动画风格"]
-
-        # Add negative as avoidance
-        if negative:
-            parts.append(f"(avoid: {negative[:100]})")
-
-        parts.append(prompt.strip())
-
-        # Style anchors
-        parts.append("anime art style, clean linework, flat color illustration")
-
-        return ", ".join(p for p in parts if p)
+        """Legacy alias — delegates to dynamic StyleInjector (anime style)."""
+        return self.injector.enhance_prompt(prompt, negative)
 
     async def close(self):
         if self._client:

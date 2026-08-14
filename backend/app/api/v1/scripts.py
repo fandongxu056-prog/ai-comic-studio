@@ -143,9 +143,10 @@ async def _get_project(project_id: str, user_id: str, db: AsyncSession) -> Proje
 
 
 async def _get_latest_script(project_id: str, db: AsyncSession) -> Script | None:
+    # Filter out empty/broken records (id='' from failed runs), prefer latest version
     q = (
         select(Script)
-        .where(Script.project_id == project_id)
+        .where(Script.project_id == project_id, Script.id != "", Script.episode_count > 0)
         .order_by(Script.version.desc())
         .limit(1)
     )

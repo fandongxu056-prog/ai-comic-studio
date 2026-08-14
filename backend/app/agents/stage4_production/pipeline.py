@@ -87,15 +87,19 @@ class ProductionOrchestrator:
         image_provider: Optional[ImageProvider] = None,
         video_provider: Optional[VideoProvider] = None,
         tts_provider: Optional[TTSProvider] = None,
+        art_style: str = "anime",
     ):
         self.project_id = project_id
+        self.art_style = art_style
         self.image_provider = image_provider or create_image_provider(
             settings.image_provider,
-            api_key=settings.openai_api_key,
+            api_key=settings.minimax_api_key or settings.openai_api_key,
+            art_style=art_style,
         )
         self.video_provider = video_provider or create_video_provider(
-            settings.video_provider or "kling",
-            api_key="",
+            settings.video_provider or "minimax",
+            api_key=settings.minimax_api_key,
+            art_style=art_style,
         )
         self.tts_provider = tts_provider or create_tts_provider(
             settings.tts_provider,

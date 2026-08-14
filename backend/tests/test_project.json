@@ -1,0 +1,14 @@
+{
+  "title": "戒指之谜",
+  "source_type": "original_idea",
+  "source_content": "少年在垃圾场捡到神秘戒指，能看到死者最后3秒记忆，用能力破案却发现戒指前主人还活着",
+  "target_spec": {
+    "format": "horizontal_standard",
+    "aspect_ratio": "16:9",
+    "total_duration_seconds": 120,
+    "episode_count": 1,
+    "duration_per_episode_seconds": 120
+  },
+  "style_preference": {"art_style": "anime"},
+  "genre": {"primary": "urban", "sub_tags": ["悬疑", "异能"]}
+}

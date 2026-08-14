@@ -48,8 +48,8 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-5-20251001"
 
     # ── Image Generation ──
-    image_provider: Literal["openai", "dalle", "stable_diffusion", "flux"] = "openai"
-    image_model: str = "dall-e-3"
+    image_provider: Literal["minimax", "openai", "dalle", "stable_diffusion", "flux"] = "minimax"
+    image_model: str = "image-01"
     image_concurrency: int = 4
 
     # ── Video Generation ──

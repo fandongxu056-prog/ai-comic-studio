@@ -1,17 +1,37 @@
 import { useState } from "react";
+import { useParams } from "react-router-dom";
 import {
   Image, User, Building2, Box, Palette, Sparkles,
   CheckCircle, AlertTriangle, ThumbsUp, ThumbsDown, RefreshCw, Eye,
 } from "lucide-react";
+import { api } from "@/services/api";
+import { useStageData } from "@/hooks/use-stage-data";
 import { mockAssets } from "@/stores/mock-data";
 
 const SC = "var(--color-stage-assets)";
 
 export function AssetWorkspace() {
+  const { id } = useParams<{ id: string }>();
   const [tab, setTab] = useState<"characters" | "locations" | "props" | "style">("characters");
   const [selectedChar, setSelectedChar] = useState(0);
 
-  const assets = mockAssets;
+  const { data: assets } = useStageData<typeof mockAssets>({
+    mock: mockAssets,
+    fetch: async () => {
+      if (!id) return mockAssets;
+      const [chars, locs] = await Promise.all([
+        api.get<any>(`/assets/${id}/characters`),
+        api.get<any>(`/assets/${id}/locations`),
+      ]);
+      return {
+        ...mockAssets,
+        characters: (chars.characters?.length ? chars.characters : mockAssets.characters) as typeof mockAssets.characters,
+        locations: (locs.locations?.length ? locs.locations : mockAssets.locations) as typeof mockAssets.locations,
+        style_manifest: (chars.style_manifest || mockAssets.style_manifest) as typeof mockAssets.style_manifest,
+      };
+    },
+    hasData: (d) => d.characters.length > 0,
+  });
   const character = assets.characters[selectedChar];
 
   const tabs = [
